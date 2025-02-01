@@ -4,7 +4,6 @@ import uuid
 from flask_cors import CORS
 from dotenv import load_dotenv
 import os
-import time  # Import time library for the current time
 
 # Load environment variables from the .env file
 load_dotenv()
@@ -19,68 +18,7 @@ api_secret = os.getenv('RAZORPAY_API_SECRET')
 # Initialize Razorpay client
 client = razorpay.Client(auth=(api_key, api_secret))
 
-@app.route('/create-invoice', methods=['POST'])
-def create_invoice():
-    data = request.get_json()
-    orderid = data.get('orderid')
-    uid = data.get('uid')
-    productCodes = data.get('productCodes')
-    productQuantities = data.get('productQuantities')
-    products = data.get('products')  # This is now an object with product codes as keys
-
-    if not orderid or not uid or not productCodes or not products:
-        return jsonify({'error': 'Missing required data'}), 400
-
-    # Prepare line_items for Razorpay invoice
-    line_items = []
-    total_amount = 0
-
-    for i, productCode in enumerate(productCodes):
-        product = products.get(str(productCode))  # Ensure productCode is a string (in case it's passed as an integer)
-        if product:
-            line_items.append({
-                'name': product['name'],
-                'description': product['description'],
-                'amount': product['discounted_price'] * 100,  # Convert to paise
-                'currency': 'INR',
-                'quantity': productQuantities[i]
-            })
-            total_amount += product['discounted_price'] * productQuantities[i] * 100  # Total amount in paise
-
-    # Calculate expire_by to be 15 minutes ahead
-    expire_by = data.get('expire_by', int(time.time()) + 900)  # Default to 15 mins from now
-
-    # Create invoice data
-    invoice_data = {
-        'type': 'invoice',
-        'customer': {
-            'name': 'John Doe',  # Replace with actual data
-            'email': 'john@example.com',  # Replace with actual data
-            'contact': '9876543210'  # Replace with actual data
-        },
-        'line_items': line_items,
-        'expire_by': expire_by,  # Use the calculated expire_by or from data
-        'currency': 'INR',
-        'sms_notify': 1,
-        'email_notify': 1,
-        'receipt': orderid,
-        'description': f'Invoice for order {orderid}',
-        'terms': 'No returns, replacements, or refunds.',
-        'partial_payment': False
-    }
-
-    try:
-        # Create the Razorpay invoice
-        invoice = client.invoice.create(data=invoice_data)
-
-        # Return invoice details with URL
-        return jsonify({'success': True, 'invoice': invoice}), 200
-    except Exception as e:
-        # Log the error for debugging purposes
-        print(f"Error creating invoice: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-# Route to create an order (for testing purposes)
+# Route to create an order
 @app.route('/create-order', methods=['POST'])
 def create_order():
     data = request.get_json()
@@ -138,3 +76,5 @@ def verify_payment():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+
