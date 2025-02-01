@@ -18,7 +18,80 @@ api_secret = os.getenv('RAZORPAY_API_SECRET')
 # Initialize Razorpay client
 client = razorpay.Client(auth=(api_key, api_secret))
 
-# Route to create an order
+# Route to create invoice
+@app.route('/create-invoice', methods=['POST'])
+def create_invoice():
+    try:
+        data = request.get_json()
+        orderid = data.get('orderid')
+        uid = data.get('uid')
+        productCodes = data.get('productCodes')
+        productQuantities = data.get('productQuantities')
+        products = data.get('products')
+
+        # Validate required fields
+        if not orderid or not uid or not productCodes or not products:
+            return jsonify({'error': 'Missing required data'}), 400
+
+        # Simulating user details fetch (replace with actual DB query)
+        customer_name = 'John Doe'  # Example, replace with actual user data
+        customer_email = 'john@example.com'
+        customer_contact = '9876543210'
+
+        # Prepare line_items and calculate total amount
+        line_items = []
+        total_amount = 0
+
+        # Process each product code from the productCodes array
+        for i, productCode in enumerate(productCodes):
+            # Fetch the product from the provided products object
+            product = next((p for key, p in products.items() if p['code'] == productCode), None)
+            
+            if product:
+                # Create line item for each product
+                line_items.append({
+                    'name': product['name'],
+                    'description': product['description'],
+                    'amount': product['discounted_price'] * 100,  # Convert to paise
+                    'currency': 'INR',
+                    'quantity': productQuantities[i]
+                })
+                # Add the product total price to the overall amount (in paise)
+                total_amount += product['discounted_price'] * productQuantities[i] * 100
+            else:
+                return jsonify({'error': f'Product with code {productCode} not found'}), 404
+
+        # Create invoice data for Razorpay
+        invoice_data = {
+            'type': 'invoice',
+            'customer': {
+                'name': customer_name,
+                'email': customer_email,
+                'contact': customer_contact
+            },
+            'line_items': line_items,
+            'expire_by': 1735689600,  # Expiration timestamp
+            'currency': 'INR',
+            'sms_notify': 1,
+            'email_notify': 1,
+            'receipt': orderid,
+            'description': f'Invoice for order {orderid}',
+            'terms': 'No returns, replacements, or refunds.',
+            'partial_payment': False
+        }
+
+        # Create the Razorpay invoice
+        invoice = client.invoice.create(data=invoice_data)
+
+        # Return the invoice details, including the short URL for viewing the invoice
+        return jsonify({'success': True, 'invoice': invoice, 'short_url': invoice['short_url']}), 200
+
+    except Exception as e:
+        # Log the error for debugging purposes
+        print(f"Error creating invoice: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# Route to create an order (for testing purposes)
 @app.route('/create-order', methods=['POST'])
 def create_order():
     data = request.get_json()
@@ -72,68 +145,6 @@ def verify_payment():
 
     except Exception as e:
         # Handle any errors (e.g., invalid payment ID or API error)
-        return jsonify({'error': str(e)}), 500
-
-# Route to create invoice
-@app.route('/create-invoice', methods=['POST'])
-def create_invoice():
-    data = request.get_json()
-    orderid = data.get('orderid')
-    uid = data.get('uid')
-    productCodes = data.get('productCodes')
-    productQuantities = data.get('productQuantities')
-    products = data.get('products')
-
-    if not orderid or not uid or not productCodes or not products:
-        return jsonify({'error': 'Missing required data'}), 400
-
-    # Fetch user details from your database using UID (for example Firebase)
-    customer_name = 'John Doe'  # Example, replace with actual user data
-    customer_email = 'john@example.com'
-    customer_contact = '9876543210'
-
-    # Prepare line_items for Razorpay invoice
-    line_items = []
-    total_amount = 0
-
-    for i, productCode in enumerate(productCodes):
-        product = next((p for p in products if p['code'] == productCode), None)
-        if product:
-            line_items.append({
-                'name': product['name'],
-                'description': product['description'],
-                'amount': product['discounted_price'] * 100,  # Convert to paise
-                'currency': 'INR',
-                'quantity': productQuantities[i]
-            })
-            total_amount += product['discounted_price'] * productQuantities[i] * 100  # Total amount in paise
-
-    # Create invoice data
-    invoice_data = {
-        'type': 'invoice',
-        'customer': {
-            'name': customer_name,
-            'email': customer_email,
-            'contact': customer_contact
-        },
-        'line_items': line_items,
-        'expire_by': 1735689600,  # Expiration timestamp
-        'currency': 'INR',
-        'sms_notify': 1,
-        'email_notify': 1,
-        'receipt': orderid,
-        'description': 'Invoice for order ' + orderid,
-        'terms': 'No returns, replacements, or refunds.',
-        'partial_payment': False
-    }
-
-    try:
-        # Create the Razorpay invoice
-        invoice = client.invoice.create(data=invoice_data)
-
-        # Return invoice details with URL
-        return jsonify({'success': True, 'invoice': invoice}), 200
-    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
