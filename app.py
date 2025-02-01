@@ -26,22 +26,17 @@ def create_invoice():
     uid = data.get('uid')
     productCodes = data.get('productCodes')
     productQuantities = data.get('productQuantities')
-    products = data.get('products')
+    products = data.get('products')  # This is now an object with product codes as keys
 
     if not orderid or not uid or not productCodes or not products:
         return jsonify({'error': 'Missing required data'}), 400
-
-    # Fetch user details from your database using UID (for example Firebase)
-    customer_name = 'John Doe'  # Example, replace with actual user data
-    customer_email = 'john@example.com'
-    customer_contact = '9876543210'
 
     # Prepare line_items for Razorpay invoice
     line_items = []
     total_amount = 0
 
     for i, productCode in enumerate(productCodes):
-        product = next((p for p in products if p['code'] == productCode), None)
+        product = products.get(str(productCode))  # Ensure productCode is a string (in case it's passed as an integer)
         if product:
             line_items.append({
                 'name': product['name'],
@@ -53,23 +48,23 @@ def create_invoice():
             total_amount += product['discounted_price'] * productQuantities[i] * 100  # Total amount in paise
 
     # Calculate expire_by to be 15 minutes ahead
-    expire_by = int(time.time()) + 900  # Current time + 15 minutes (900 seconds)
+    expire_by = data.get('expire_by', int(time.time()) + 900)  # Default to 15 mins from now
 
     # Create invoice data
     invoice_data = {
         'type': 'invoice',
         'customer': {
-            'name': customer_name,
-            'email': customer_email,
-            'contact': customer_contact
+            'name': 'John Doe',  # Replace with actual data
+            'email': 'john@example.com',  # Replace with actual data
+            'contact': '9876543210'  # Replace with actual data
         },
         'line_items': line_items,
-        'expire_by': expire_by,  # Use calculated expire_by
+        'expire_by': expire_by,  # Use the calculated expire_by or from data
         'currency': 'INR',
         'sms_notify': 1,
         'email_notify': 1,
         'receipt': orderid,
-        'description': 'Invoice for order ' + orderid,
+        'description': f'Invoice for order {orderid}',
         'terms': 'No returns, replacements, or refunds.',
         'partial_payment': False
     }
