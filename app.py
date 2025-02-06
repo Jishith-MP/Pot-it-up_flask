@@ -4,9 +4,11 @@ import uuid
 from flask_cors import CORS
 from dotenv import load_dotenv
 import os
-import requests
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
-# Load environment variables from the .env file
+# Load environment variables from .env
 load_dotenv()
 
 app = Flask(__name__)  # Initialize Flask app with the correct name
@@ -15,9 +17,8 @@ CORS(app)  # Enable CORS for all routes
 # Access environment variables
 api_key = os.getenv('RAZORPAY_API_KEY')
 api_secret = os.getenv('RAZORPAY_API_SECRET')
-
-# Resend API Key from .env
-RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+GMAIL_USER = os.getenv('GMAIL_USER')  # Add this to .env for your Gmail ID
+GMAIL_PASSWORD = os.getenv('GMAIL_PASSWORD')  # Add this to .env for your app password
 
 # Initialize Razorpay client
 client = razorpay.Client(auth=(api_key, api_secret))
@@ -78,7 +79,7 @@ def verify_payment():
         # Handle any errors (e.g., invalid payment ID or API error)
         return jsonify({'error': str(e)}), 500
 
-# Route to send email
+# Route to send email via Gmail SMTP
 @app.route('/send-email', methods=['POST'])
 def send_email():
     try:
@@ -126,25 +127,25 @@ def send_email():
         </html>
         """
 
-        # Resend API Request
-        url = "https://api.resend.com/emails"
-        headers = {
-            "Authorization": f"Bearer {RESEND_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        email_data = {
-            "from": "onboarding@resend.dev",  # Must be a verified sender in Resend
-            "to": [customer_email],
-            "subject": f"Order Confirmation - {order_id}",
-            "html": html_content
-        }
-        
-        response = requests.post(url, json=email_data, headers=headers)
+        # Set up the MIME structure for the email
+        msg = MIMEMultipart()
+        msg['From'] = GMAIL_USER
+        msg['To'] = customer_email
+        msg['Subject'] = f"Order Confirmation - {order_id}"
+        msg.attach(MIMEText(html_content, 'html'))
 
-        if response.status_code == 200:
-            return jsonify({"status": "success", "message": "Email sent successfully"})
-        else:
-            return jsonify({"status": "error", "message": response.text}), response.status_code
+        # Connect to Gmail's SMTP server
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()  # Secure the connection
+        server.login(GMAIL_USER, GMAIL_PASSWORD)
+
+        # Send the email
+        server.sendmail(GMAIL_USER, customer_email, msg.as_string())
+
+        # Close the server connection
+        server.quit()
+
+        return jsonify({"status": "success", "message": "Email sent successfully"}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -152,4 +153,3 @@ def send_email():
 # Run the Flask app
 if __name__ == '__main__':
     app.run(debug=True)
-
